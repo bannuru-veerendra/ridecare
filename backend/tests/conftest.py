@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from fastapi import HTTPException, status
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -235,14 +235,21 @@ async def client(test_session_maker, monkeypatch):
 
 
 @pytest_asyncio.fixture
-async def registered_user(client: AsyncClient):
-    """Create a user and return their credentials"""
+async def registered_user(client: AsyncClient, test_session_maker):
+    """Create a verified user and return their credentials"""
     payload = {
         "email": "test@ridecare.com",
         "full_name": "Test User",
         "password": "TestPassword123!",
     }
     await client.post("/auth/register", json=payload)
+    async with test_session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.email == payload["email"])
+        )
+        user = result.scalar_one()
+        user.email_verified = True
+        await session.commit()
     return payload
 
 
@@ -262,21 +269,26 @@ async def auth_headers(client: AsyncClient, registered_user: dict):
 
 
 @pytest_asyncio.fixture
-async def other_user_headers(client: AsyncClient):
-    """Register a second user and return their auth headers"""
-    await client.post(
-        "/auth/register",
-        json={
-            "email": "otheruser@ridecare.com",
-            "full_name": "Other User",
-            "password": "OtherPass123!",
-        },
-    )
+async def other_user_headers(client: AsyncClient, test_session_maker):
+    """Register a second verified user and return their auth headers"""
+    payload = {
+        "email": "otheruser@ridecare.com",
+        "full_name": "Other User",
+        "password": "OtherPass123!",
+    }
+    await client.post("/auth/register", json=payload)
+    async with test_session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.email == payload["email"])
+        )
+        user = result.scalar_one()
+        user.email_verified = True
+        await session.commit()
     login_response = await client.post(
         "/auth/login",
         json={
-            "email": "otheruser@ridecare.com",
-            "password": "OtherPass123!",
+            "email": payload["email"],
+            "password": payload["password"],
         },
     )
 

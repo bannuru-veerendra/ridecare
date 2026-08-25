@@ -15,6 +15,7 @@ async def test_register_success(client: AsyncClient):
     data = response.json()
     assert data["email"] == "test@ridecare.com"
     assert data["full_name"] == "Test User"
+    assert data["email_verified"] is False
     assert "hashed_password" not in data
     assert "id" in data
 
@@ -328,4 +329,99 @@ async def test_create_fuel_log_without_token(client: AsyncClient):
         },
     )
     assert response.status_code == 401
+
+
+async def test_login_blocked_until_email_verified(client: AsyncClient):
+    """Unverified accounts cannot log in."""
+    payload = {
+        "email": "unverified@ridecare.com",
+        "full_name": "Unverified User",
+        "password": "TestPassword123!",
+    }
+    register = await client.post("/auth/register", json=payload)
+    assert register.status_code == 201
+    assert register.json()["email_verified"] is False
+
+    login = await client.post(
+        "/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == 403
+    assert "not verified" in login.json()["detail"].lower()
+
+
+async def test_verify_email_then_login(client: AsyncClient, monkeypatch):
+    """Verification link marks the account verified and unlocks login."""
+    captured: dict[str, str] = {}
+
+    async def fake_send(*, to: str, full_name: str, link: str) -> None:
+        captured["to"] = to
+        captured["link"] = link
+        captured["token"] = link.split("token=", 1)[1]
+
+    monkeypatch.setattr("app.routes.auth.send_verification_email", fake_send)
+
+    payload = {
+        "email": "verify-me@ridecare.com",
+        "full_name": "Verify Me",
+        "password": "TestPassword123!",
+    }
+    register = await client.post("/auth/register", json=payload)
+    assert register.status_code == 201
+    assert "token" in captured
+
+    verify = await client.post(
+        "/auth/verify-email",
+        json={"token": captured["token"]},
+    )
+    assert verify.status_code == 200
+    assert "verified" in verify.json()["message"].lower()
+
+    login = await client.post(
+        "/auth/login",
+        json={"email": payload["email"], "password": payload["password"]},
+    )
+    assert login.status_code == 200
+    assert "access_token" in login.cookies
+
+
+async def test_verify_email_rejects_bad_token(client: AsyncClient):
+    response = await client.post(
+        "/auth/verify-email",
+        json={"token": "this-token-is-not-valid-at-all"},
+    )
+    assert response.status_code == 400
+
+
+async def test_resend_verification_is_generic(client: AsyncClient, monkeypatch):
+    """Resend always returns the same message (no email enumeration)."""
+    calls: list[str] = []
+
+    async def fake_send(*, to: str, full_name: str, link: str) -> None:
+        calls.append(to)
+
+    monkeypatch.setattr("app.routes.auth.send_verification_email", fake_send)
+
+    await client.post(
+        "/auth/register",
+        json={
+            "email": "resend@ridecare.com",
+            "full_name": "Resend User",
+            "password": "TestPassword123!",
+        },
+    )
+    calls.clear()
+
+    known = await client.post(
+        "/auth/resend-verification",
+        json={"email": "resend@ridecare.com"},
+    )
+    unknown = await client.post(
+        "/auth/resend-verification",
+        json={"email": "nobody@ridecare.com"},
+    )
+    assert known.status_code == 200
+    assert unknown.status_code == 200
+    assert known.json()["message"] == unknown.json()["message"]
+    assert calls == ["resend@ridecare.com"]
 

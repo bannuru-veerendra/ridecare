@@ -47,7 +47,7 @@ Most garage apps are thin CRUD. RideCare keeps **truth on the server**:
 | Compare | `GET /vehicles/compare` — side-by-side spend, mileage, and ₹/km across the garage |
 | Scale | Stable cursor pagination (`date`/`created_at` + `id`) — same-day rows never skip |
 | Speed | Redis cache with write-through invalidation on fuel, service, vehicle, and document writes; auth identity cache so warm requests skip the user `SELECT` |
-| Auth | httpOnly cookie JWT + refresh rotation, access-token blocklist (`jti`) + revoke-epoch on password change, pipelined rate limits |
+| Auth | httpOnly cookie JWT + refresh rotation, **email verification** (SMTP magic link), access-token blocklist (`jti`) + revoke-epoch on password change, pipelined rate limits |
 | Docs | Typed vault uploads with signed URLs — never public blobs; vehicle delete cleans storage |
 | Guidelines | File-backed maintenance catalog (in-memory), filterable without a DB table |
 
@@ -113,7 +113,7 @@ Oil, chain, brakes, tyres, CVT… filterable by component and severity from a st
 
 ### Settings — profile and password
 
-Update name/email or change password (revokes all sessions and clears auth cookies).
+Update name/email or change password (revokes all sessions and clears auth cookies). Changing email resets verification and sends a new confirmation link.
 
 ![Settings](docs/screenshots/12-settings.png)
 
@@ -137,6 +137,7 @@ Update name/email or change password (revokes all sessions and clears auth cooki
              fuel · service        access blocklist
              documents             revoke-epoch
                                    rate limits
+                                   email verify tokens
                                    user identity cache
                                    response cache
 ```
@@ -152,7 +153,7 @@ Every fuel / service / document row is scoped by `vehicle_id`; vehicles by `owne
 | API | FastAPI, Pydantic v2, SQLAlchemy 2 (async), Alembic |
 | Data | PostgreSQL (Supabase), Redis (Upstash) |
 | Files | Supabase Storage + signed URLs |
-| Auth | bcrypt, JWT access + refresh rotation (httpOnly cookies) |
+| Auth | bcrypt, JWT access + refresh rotation (httpOnly cookies), SMTP verification email |
 | UI | React 19, TypeScript, Vite 8, Tailwind CSS v4, shadcn/ui, Recharts |
 | Client | TanStack Query, Zustand, Axios, Zod + React Hook Form |
 | Hosting | Frontend on **Vercel** (`/api` proxy) · API on **Render** |
@@ -166,8 +167,8 @@ Live docs: **[https://ride-care.onrender.com/docs](https://ride-care.onrender.co
 
 | Module | Surface | Highlights |
 |--------|---------|------------|
-| **Auth** | `register` · `login` · `token` · `refresh` · `logout` | httpOnly cookies; access JWT blocklist on logout/refresh; one Redis pipeline for rate limit + blocklist + identity; Swagger OAuth2 form still returns bearer body |
-| **Users** | `GET/PATCH /users/me` · password change | Session revoke + access revoke-epoch + identity-cache refresh + cookie clear |
+| **Auth** | `register` · `verify-email` · `resend-verification` · `login` · `token` · `refresh` · `logout` | httpOnly cookies; SMTP magic-link verification before login; access JWT blocklist on logout/refresh; one Redis pipeline for rate limit + blocklist + identity; Swagger OAuth2 form still returns bearer body |
+| **Users** | `GET/PATCH /users/me` · password change | Session revoke + access revoke-epoch + identity-cache refresh + cookie clear; email change re-triggers verification |
 | **Vehicles** | CRUD · `…/summary` · `…/analytics` · `GET /vehicles/compare` | Live odometer; cost-per-km (fuel + service); garage compare |
 | **Fuel** | CRUD `/fuel_logs/?vehicle_id=` · `GET …/export` | Liters + km/L; cascade recalc; CSV of full history |
 | **Service** | CRUD · `GET …/next` · `GET …/export` | Next-due helper; CSV of full history |
@@ -198,11 +199,13 @@ List responses use a shared cursor page (stable across same-day rows):
 | [`backend/app/utils/cache.py`](backend/app/utils/cache.py) | Cache helpers, `CACHE_MISS` sentinel, vehicle + user-identity keys |
 | [`backend/app/utils/auth_context.py`](backend/app/utils/auth_context.py) | Shared auth hot-path state (rate-limit pipeline → `get_current_user`) |
 | [`backend/app/utils/pagination.py`](backend/app/utils/pagination.py) | Composite cursor paginator |
+| [`backend/app/utils/email.py`](backend/app/utils/email.py) | SMTP transactional mail (verification links) |
+| [`backend/app/utils/email_verification_service.py`](backend/app/utils/email_verification_service.py) | Redis one-time verification tokens |
 | [`backend/app/utils/reminders.py`](backend/app/utils/reminders.py) | Service soon/overdue + document expiry rules |
 | [`backend/data/maintenance_guidelines.json`](backend/data/maintenance_guidelines.json) | Guideline catalog |
-| [`backend/tests/`](backend/tests/) | Auth, users, CRUD, pagination, cache, summary, analytics, compare, export, documents, rate limits, guidelines |
+| [`backend/tests/`](backend/tests/) | Auth (incl. verify/resend), users, CRUD, pagination, cache, summary, analytics, compare, export, documents, rate limits, guidelines |
 | [`frontend/src/features/`](frontend/src/features/) | Domain modules (hooks · forms · charts) |
-| [`frontend/src/pages/`](frontend/src/pages/) | Dashboard, garage, compare, detail, settings, maintenance |
+| [`frontend/src/pages/`](frontend/src/pages/) | Auth (login · register · check-email · verify-email), dashboard, garage, compare, detail, settings, maintenance |
 | [`ROADMAP.md`](ROADMAP.md) | Shipped vs next |
 
 ```
@@ -229,7 +232,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 pip install -r requirements.txt
-cp .env.example .env   # DATABASE_URL, JWT, Supabase, Redis, ALLOWED_ORIGINS
+cp .env.example .env   # DATABASE_URL, JWT, Supabase, Redis, SMTP, FRONTEND_URL, ALLOWED_ORIGINS
 alembic upgrade head
 uvicorn main:app --reload
 ```
@@ -265,7 +268,7 @@ cd backend
 
 | File | Role | Commit? |
 |------|------|---------|
-| `backend/.env` | Dev DB, JWT, Supabase, Redis | No |
+| `backend/.env` | Dev DB, JWT, Supabase, Redis, SMTP | No |
 | `backend/.env.test` | Pytest isolation | No |
 | `backend/.env.example` | Required keys template | Yes |
 | `frontend/.env` | Local `VITE_API_URL` | No |
@@ -275,7 +278,7 @@ cd backend
 
 ## What’s included
 
-Auth · multi-vehicle garage with **Load more** · server-side mileage (including baseline recalc) · service history with **Load more** · **CSV export** of fuel and service history · document vault with **Load more** · summary dashboard with **in-app reminders** · **cost-per-km (fuel + service)** · **garage compare** · analytics charts · maintenance guide · stable cursor pagination · Redis caching with write-through invalidation · pipelined auth (rate limit + identity cache) · access-token blocklisting · CI + production deploy
+Auth (email verification via SMTP) · multi-vehicle garage with **Load more** · server-side mileage (including baseline recalc) · service history with **Load more** · **CSV export** of fuel and service history · document vault with **Load more** · summary dashboard with **in-app reminders** · **cost-per-km (fuel + service)** · **garage compare** · analytics charts · maintenance guide · stable cursor pagination · query-shaped composite indexes · Redis caching with write-through invalidation · pipelined auth (rate limit + identity cache) · access-token blocklisting · CI + production deploy
 
 What’s next → [ROADMAP.md](ROADMAP.md)
 

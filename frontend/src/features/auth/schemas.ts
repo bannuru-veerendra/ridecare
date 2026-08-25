@@ -21,5 +21,10 @@ export const registerSchema = z
         message: "Passwords do not match",
     });
 
+export const resendVerificationSchema = z.object({
+    email: z.string().email("Enter a valid email"),
+});
+
 export type LoginSchema = z.infer<typeof loginSchema>;
 export type RegisterSchema = z.infer<typeof registerSchema>;
+export type ResendVerificationSchema = z.infer<typeof resendVerificationSchema>;

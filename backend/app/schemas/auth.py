@@ -60,3 +60,23 @@ class LogoutRequest(BaseModel):
     """Request body for POST /auth/logout (optional when httpOnly cookie is set)."""
     refresh_token: str | None = None
 
+
+class VerifyEmailRequest(BaseModel):
+    """Request body for POST /auth/verify-email"""
+    token: str = Field(min_length=16)
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request body for POST /auth/resend-verification"""
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return normalize_email(value)
+
+
+class MessageResponse(BaseModel):
+    """Generic success message for verification / resend."""
+    message: str
+

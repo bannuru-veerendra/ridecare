@@ -39,6 +39,7 @@ def user_identity_payload(user: Any) -> dict[str, Any]:
         "email": user.email,
         "full_name": user.full_name,
         "is_active": bool(user.is_active),
+        "email_verified": bool(getattr(user, "email_verified", False)),
     }
 
 

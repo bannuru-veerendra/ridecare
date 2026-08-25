@@ -8,6 +8,8 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 
 ### Auth & security
 - Register / login with JWT access tokens (httpOnly cookies)
+- **Email verification** — SMTP magic link on register; login blocked until confirmed; resend endpoint
+- Changing email resets verification, sends a new link, and clears sessions
 - Refresh-token rotation in Redis; logout revokes sessions
 - Password strength policy; profile + password change with session revoke **and cookie clear**
 - Access-token blocklisting in Redis (`jti`) on logout / refresh; per-user revoke epoch on password change
@@ -34,6 +36,7 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 - `GET /service_logs/next` for reminders
 - Cursor-paginated list + service tab **Load more**
 - Partial PATCH validates next-service odometer against existing reading
+- Reminder clears once a visit meets the due date or odometer
 - **CSV export** of full service history (`GET /service_logs/export`)
 
 ### Documents
@@ -53,12 +56,13 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 - Write-through invalidation on fuel / service / vehicle / document writes
 - Auth hot path: one Redis pipeline for rate limit + blocklist + revoke-epoch + user identity; warm requests skip the Postgres user lookup
 - Identity cache invalidated on profile / password change
+- Query-shaped **composite indexes** (`vehicle_id`/`owner_id` + sort columns) for list/pagination paths
 - Alembic migrations, async SQLAlchemy, GitHub Actions CI (pytest)
 - Deployed API (Render) + frontend (Vercel) with same-origin `/api` proxy for cookies
 - Local Vite `/api` proxy to `127.0.0.1:8000` (same-origin cookies, no Windows `localhost` IPv6 delay)
 
 ### Frontend product surface
-- Dark rider UI: auth, garage, compare, vehicle detail (Fuel · Service · Docs · Analytics)
+- Dark rider UI: auth (login · register · **check-email** · **verify-email**), garage, compare, vehicle detail (Fuel · Service · Docs · Analytics)
 - Dashboard driven by the summary API
 - **In-app reminders** on the dashboard — service soon/overdue + document expiry
 - Settings (profile / password), error boundary, 404 page
@@ -76,6 +80,7 @@ Nothing queued as a product slice. See Later for ideas that are out of scope.
 
 These are out of scope for now — not missing pieces of the current product.
 
+- Google / social login
 - Email / push for service-due and document-expiry
 - Auto due dates from the maintenance catalog + odometer (guide is interval tips today)
 - Structured insurance fields (provider, number, coverage)

@@ -19,8 +19,11 @@ export const useRegister = () => {
                 full_name: values.full_name,
                 password: values.password,
             }),
-        onSuccess: () => {
-            navigate("/login?registered=true");
+        onSuccess: (_user, values) => {
+            navigate(
+                `/check-email?email=${encodeURIComponent(values.email)}`,
+                { replace: true }
+            );
         },
         onError: (error) => {
             toast.error(

@@ -15,6 +15,10 @@ export interface SessionResponse {
     token_type: string;
 }
 
+export interface MessageResponse {
+    message: string;
+}
+
 export const authApi = {
     register: async (payload: RegisterPayload): Promise<User> => {
         const response = await apiClient.post<User>(
@@ -34,5 +38,21 @@ export const authApi = {
 
     logout: async (): Promise<void> => {
         await apiClient.post("/auth/logout", {});
+    },
+
+    verifyEmail: async (token: string): Promise<MessageResponse> => {
+        const response = await apiClient.post<MessageResponse>(
+            "/auth/verify-email",
+            { token }
+        );
+        return response.data;
+    },
+
+    resendVerification: async (email: string): Promise<MessageResponse> => {
+        const response = await apiClient.post<MessageResponse>(
+            "/auth/resend-verification",
+            { email }
+        );
+        return response.data;
     },
 };

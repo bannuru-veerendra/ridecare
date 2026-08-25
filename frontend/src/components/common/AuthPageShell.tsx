@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import RideCareLogo from "@/components/common/RideCareLogo";
 
 interface AuthPageShellProps {
-    logoTo: "/login" | "/register";
+    logoTo: "/login" | "/register" | "/check-email";
     title: string;
     subtitle: string;
     children: ReactNode;

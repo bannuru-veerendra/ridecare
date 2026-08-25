@@ -65,6 +65,7 @@ async def test_update_email(client: AsyncClient, auth_headers: dict):
     )
     assert response.status_code == 200
     assert response.json()["email"] == "newemail@ridecare.com"
+    assert response.json()["email_verified"] is False
 
 
 async def test_update_email_conflict(

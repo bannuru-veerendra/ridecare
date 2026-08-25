@@ -57,6 +57,7 @@ def _user_from_identity_cache(data: dict) -> User | None:
             full_name=data["full_name"],
             hashed_password="",
             is_active=True,
+            email_verified=bool(data.get("email_verified", False)),
         )
     except (KeyError, TypeError, ValueError):
         return None

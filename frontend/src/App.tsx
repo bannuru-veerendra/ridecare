@@ -7,6 +7,8 @@ import ProtectedRoute from "@/components/common/ProtectedRoute";
 import AppLayout from "@/components/common/AppLayout";
 import LoginPage from "@/pages/LoginPage";
 import RegisterPage from "@/pages/RegisterPage";
+import CheckEmailPage from "@/pages/CheckEmailPage";
+import VerifyEmailPage from "@/pages/VerifyEmailPage";
 import NotFoundPage from "@/pages/NotFoundPage";
 
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
@@ -33,6 +35,8 @@ export default function App() {
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/check-email" element={<CheckEmailPage />} />
+                <Route path="/verify-email" element={<VerifyEmailPage />} />
 
                 {/* Protected routes — all share AppLayout */}
                 <Route element={<ProtectedRoute />}>

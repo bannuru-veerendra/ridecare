@@ -13,10 +13,13 @@ from app.models.user import User
 from app.schemas.auth import (
     LoginRequest,
     LogoutRequest,
+    MessageResponse,
     RefreshRequest,
+    ResendVerificationRequest,
     SessionResponse,
     TokenResponse,
     UserCreate,
+    VerifyEmailRequest,
 )
 from app.schemas.user import UserResponse
 from app.utils.access_token_service import blocklist_access_token
@@ -25,6 +28,12 @@ from app.utils.auth_cookies import (
     REFRESH_COOKIE,
     clear_auth_cookies,
     set_auth_cookies,
+)
+from app.utils.email import send_verification_email
+from app.utils.email_verification_service import (
+    consume_verification_token,
+    store_verification_token,
+    verification_link,
 )
 from app.utils.jwt import create_access_token
 from app.utils.rate_limiter import auth_rate_limit
@@ -45,11 +54,38 @@ _REDIS_UNAVAILABLE = HTTPException(
     detail="Authentication service temporarily unavailable",
 )
 
+_EMAIL_NOT_VERIFIED = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Email not verified. Check your inbox or request a new verification link.",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class _IssuedTokens:
     access_token: str
     refresh_token: str
+
+
+async def _issue_verification_email(
+    redis: Redis,
+    *,
+    user_id: str,
+    email: str,
+    full_name: str,
+) -> None:
+    """Create a Redis token and send the verification email."""
+    try:
+        raw_token = await store_verification_token(redis, user_id)
+    except RedisError:
+        logger.exception("Redis unavailable while storing verification token")
+        raise _REDIS_UNAVAILABLE
+
+    link = verification_link(raw_token)
+    try:
+        await send_verification_email(to=email, full_name=full_name, link=link)
+    except Exception:
+        logger.exception("Failed to send verification email to=%s", email)
+        # User is created; they can use resend. Do not fail registration.
 
 
 async def _authenticate_user(
@@ -84,6 +120,10 @@ async def _authenticate_user(
             detail="Invalid credentials",
         )
 
+    if not db_user.email_verified:
+        logger.warning("Login failed: email not verified for email=%s", email)
+        raise _EMAIL_NOT_VERIFIED
+
     user_id = str(db_user.id)
     access_token = create_access_token(user_id)
     try:
@@ -116,7 +156,7 @@ async def register(
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> UserResponse:
-    """Register a new user"""
+    """Register a new user and send an email verification link."""
     await auth_rate_limit(request, redis)
 
     result = await db.execute(select(User).where(User.email == user.email))
@@ -130,12 +170,89 @@ async def register(
         email=user.email,
         full_name=user.full_name,
         hashed_password=hash_password(user.password),
+        email_verified=False,
     )
 
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
+
+    await _issue_verification_email(
+        redis,
+        user_id=str(db_user.id),
+        email=db_user.email,
+        full_name=db_user.full_name,
+    )
     return db_user
+
+
+@router.post("/verify-email", response_model=MessageResponse)
+async def verify_email(
+    request: Request,
+    body: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> MessageResponse:
+    """Consume a verification token and mark the user's email as verified."""
+    await auth_rate_limit(request, redis)
+
+    try:
+        user_id = await consume_verification_token(redis, body.token)
+    except RedisError:
+        logger.exception("Redis unavailable during email verification")
+        raise _REDIS_UNAVAILABLE
+
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    db_user = result.scalar_one_or_none()
+    if db_user is None or not db_user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification link",
+        )
+
+    if not db_user.email_verified:
+        db_user.email_verified = True
+        await db.commit()
+
+    return MessageResponse(message="Email verified. You can sign in now.")
+
+
+@router.post("/resend-verification", response_model=MessageResponse)
+async def resend_verification(
+    request: Request,
+    body: ResendVerificationRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> MessageResponse:
+    """
+    Resend verification email.
+    Always returns the same message to avoid email enumeration.
+    """
+    await auth_rate_limit(request, redis)
+
+    result = await db.execute(select(User).where(User.email == body.email))
+    db_user = result.scalar_one_or_none()
+    if (
+        db_user is not None
+        and db_user.is_active
+        and not db_user.email_verified
+    ):
+        await _issue_verification_email(
+            redis,
+            user_id=str(db_user.id),
+            email=db_user.email,
+            full_name=db_user.full_name,
+        )
+
+    return MessageResponse(
+        message="If that email is registered and unverified, a new link has been sent.",
+    )
 
 
 @router.post("/login", response_model=SessionResponse)

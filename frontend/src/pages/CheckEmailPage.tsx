@@ -1,57 +1,48 @@
-import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PasswordInput } from "@/components/common/PasswordInput";
 import AuthPageShell from "@/components/common/AuthPageShell";
-
-import { useLogin } from "@/features/auth/hooks/useLogin";
-import { loginSchema, type LoginSchema } from "@/features/auth/schemas";
+import { useResendVerification } from "@/features/auth/hooks/useResendVerification";
+import {
+    resendVerificationSchema,
+    type ResendVerificationSchema,
+} from "@/features/auth/schemas";
 
 /**
- * Login page — immersive rider entry.
+ * After register (or failed login when unverified): check inbox + resend.
  */
-export default function LoginPage() {
-    const navigate = useNavigate();
+export default function CheckEmailPage() {
     const [searchParams] = useSearchParams();
-    const { mutate: login, isPending } = useLogin();
+    const presetEmail = searchParams.get("email") ?? "";
+    const { mutate: resend, isPending } = useResendVerification();
     const {
         register,
         handleSubmit,
         formState: { errors },
-    } = useForm<LoginSchema>({
-        resolver: zodResolver(loginSchema),
+    } = useForm<ResendVerificationSchema>({
+        resolver: zodResolver(resendVerificationSchema),
+        defaultValues: { email: presetEmail },
         reValidateMode: "onBlur",
     });
-
-    useEffect(() => {
-        if (searchParams.get("verified") !== "true") {
-            return;
-        }
-        toast.success("Email verified. You can sign in now.", {
-            id: "email-verified",
-        });
-        navigate("/login", { replace: true });
-    }, [searchParams, navigate]);
-
-    const onSubmit = (data: LoginSchema) => {
-        login(data);
-    };
 
     return (
         <AuthPageShell
             logoTo="/login"
-            title="Kickstand up"
-            subtitle="Sign in and get back on the road"
+            title="Check your email"
+            subtitle="We sent a verification link to confirm your account"
         >
+            <p className="mt-4 text-sm text-muted-foreground">
+                Open the link in that email to unlock login. It expires in 24
+                hours. If it never arrived, resend below.
+            </p>
+
             <form
-                onSubmit={handleSubmit(onSubmit)}
+                onSubmit={handleSubmit((data) => resend(data.email))}
                 className="mt-4 space-y-3"
                 noValidate
             >
@@ -75,22 +66,6 @@ export default function LoginPage() {
                     )}
                 </div>
 
-                <div className="space-y-1.5">
-                    <Label htmlFor="password">Password</Label>
-                    <PasswordInput
-                        id="password"
-                        placeholder="Password"
-                        autoComplete="current-password"
-                        className="border-white/15 bg-white/5"
-                        {...register("password")}
-                    />
-                    {errors.password && (
-                        <p className="text-sm text-destructive">
-                            {errors.password.message}
-                        </p>
-                    )}
-                </div>
-
                 <Button
                     type="submit"
                     className="w-full bg-brand text-brand-foreground hover:bg-brand/90"
@@ -99,18 +74,18 @@ export default function LoginPage() {
                     {isPending ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                        "Login"
+                        "Resend verification email"
                     )}
                 </Button>
             </form>
 
             <p className="mt-4 text-sm text-muted-foreground">
-                New rider?{" "}
+                Already verified?{" "}
                 <Link
-                    to="/register"
+                    to="/login"
                     className="font-semibold text-brand hover:text-brand/80"
                 >
-                    Create account
+                    Sign in
                 </Link>
             </p>
         </AuthPageShell>

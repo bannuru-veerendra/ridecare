@@ -171,9 +171,10 @@ Live docs: **[https://ride-care.onrender.com/docs](https://ride-care.onrender.co
 | **Users** | `GET/PATCH /users/me` · password change | Session revoke + access revoke-epoch + identity-cache refresh + cookie clear; email change re-triggers verification |
 | **Vehicles** | CRUD · `…/summary` · `…/analytics` · `GET /vehicles/compare` | Live odometer; cost-per-km (fuel + service); garage compare |
 | **Fuel** | CRUD `/fuel_logs/?vehicle_id=` · `GET …/export` | Liters + km/L; cascade recalc; CSV of full history |
-| **Service** | CRUD · `GET …/next` · `GET …/export` | Next-due helper; CSV of full history |
+| **Service** | CRUD · `suggest-next-due` · `GET …/next` · `GET …/export` | Catalog-based next-due suggestions; CSV of full history |
 | **Documents** | Multipart CRUD · cursor list | Type enum, 10 MB, signed URLs; clear expiry/notes; expiry status from API |
 | **Guidelines** | `/maintenance-guidelines/` + filters | JSON file + in-memory cache |
+| **Internal** | `POST /internal/reminder-digests` | Cron-secured daily email digests (service + document reminders) |
 
 List responses use a shared cursor page (stable across same-day rows):
 

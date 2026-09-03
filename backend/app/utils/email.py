@@ -56,3 +56,25 @@ async def send_verification_email(*, to: str, full_name: str, link: str) -> None
         "<p>If you did not sign up, you can ignore this email.</p>"
     )
     await send_email(to=to, subject=subject, html=html, text=text)
+
+
+async def send_reminder_digest_email(
+    *,
+    to: str,
+    full_name: str,
+    dashboard_url: str,
+    body_text: str,
+    body_html: str,
+) -> None:
+    subject = "RideCare reminders"
+    text = (
+        f"Hi {full_name},\n\n"
+        f"{body_text}\n\n"
+        f"Open your garage: {dashboard_url}\n"
+    )
+    html = (
+        f"<p>Hi {full_name},</p>"
+        f"{body_html}"
+        f'<p><a href="{dashboard_url}">Open RideCare</a></p>'
+    )
+    await send_email(to=to, subject=subject, html=html, text=text)

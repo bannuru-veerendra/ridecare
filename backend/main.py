@@ -11,6 +11,7 @@ from app.routes import (
     auth,
     documents,
     fuel_logs,
+    internal,
     maintenance_guidelines,
     service_logs,
     users,
@@ -77,7 +78,7 @@ async def general_rate_limit_middleware(request: Request, call_next):
     Health and docs endpoints are skipped entirely.
     """
     skip_paths = {"/health", "/docs", "/openapi.json", "/redoc"}
-    skip_prefixes = ("/auth/",)
+    skip_prefixes = ("/auth/", "/internal/")
 
     path = request.url.path
 
@@ -112,3 +113,4 @@ app.include_router(service_logs.router)
 app.include_router(documents.router)
 app.include_router(users.router)
 app.include_router(maintenance_guidelines.router)
+app.include_router(internal.router)

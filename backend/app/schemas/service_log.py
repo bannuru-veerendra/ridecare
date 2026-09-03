@@ -76,3 +76,25 @@ class ServiceLogResponse(BaseModel):
     notes: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SuggestNextDueRequest(BaseModel):
+    """Body for POST /service_logs/suggest-next-due"""
+    date: dt_date
+    odometer: int
+    services_done: list[str]
+
+    @model_validator(mode="after")
+    def validate_values(self):
+        if self.odometer <= 0:
+            raise ValueError("Odometer must be greater than 0")
+        if not self.services_done:
+            raise ValueError("At least one service must be done")
+        return self
+
+
+class SuggestNextDueResponse(BaseModel):
+    next_service_date: dt_date | None = None
+    next_service_odometer: int | None = None
+    matched_tasks: list[str] = []
+

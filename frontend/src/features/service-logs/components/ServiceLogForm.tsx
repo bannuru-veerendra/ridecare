@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X, Plus, Wrench } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import FormErrorBanner from "@/components/common/FormErrorBanner";
 import FormSubmitButton from "@/components/common/FormSubmitButton";
+import { serviceLogsApi } from "@/api/service-logs.api";
 import {
     serviceLogSchema,
     type ServiceLogSchema,
@@ -50,6 +52,7 @@ export default function ServiceLogForm({
         handleSubmit,
         setValue,
         reset,
+        getValues,
         formState: { errors },
     } = useForm<ServiceLogSchema>({
         resolver: zodResolver(serviceLogSchema),
@@ -59,6 +62,8 @@ export default function ServiceLogForm({
             services_done: [],
         },
     });
+
+    const [suggestPending, setSuggestPending] = useState(false);
 
     // Prefill when editing; create mode remounts via key on the parent
     useEffect(() => {
@@ -96,6 +101,54 @@ export default function ServiceLogForm({
         if (trimmed && !selectedServices.includes(trimmed)) {
             setSelectedServices((prev) => [...prev, trimmed]);
             setCustomService("");
+        }
+    };
+
+    const fillFromGuide = async () => {
+        const { date, odometer } = getValues();
+        if (!selectedServices.length) {
+            toast.error("Select at least one service first");
+            return;
+        }
+        if (!odometer || Number.isNaN(Number(odometer))) {
+            toast.error("Enter the visit odometer first");
+            return;
+        }
+        setSuggestPending(true);
+        try {
+            const suggestion = await serviceLogsApi.suggestNextDue({
+                date: date || appTodayISO(),
+                odometer: Number(odometer),
+                services_done: selectedServices,
+            });
+            if (
+                !suggestion.next_service_date &&
+                suggestion.next_service_odometer == null
+            ) {
+                toast.message("No catalog interval matched these services");
+                return;
+            }
+            if (suggestion.next_service_date) {
+                setValue("next_service_date", suggestion.next_service_date, {
+                    shouldValidate: true,
+                });
+            }
+            if (suggestion.next_service_odometer != null) {
+                setValue(
+                    "next_service_odometer",
+                    suggestion.next_service_odometer,
+                    { shouldValidate: true }
+                );
+            }
+            toast.success(
+                suggestion.matched_tasks.length
+                    ? `Filled from: ${suggestion.matched_tasks.join(", ")}`
+                    : "Next due filled from guide"
+            );
+        } catch {
+            toast.error("Could not suggest next due from the guide");
+        } finally {
+            setSuggestPending(false);
         }
     };
 
@@ -281,7 +334,21 @@ export default function ServiceLogForm({
                     )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                        <Label className="mb-0">Next due</Label>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-white/15"
+                            disabled={suggestPending || isPending}
+                            onClick={() => void fillFromGuide()}
+                        >
+                            {suggestPending ? "Suggesting…" : "Fill from guide"}
+                        </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                         <Label htmlFor="next_service_date">
                             Next service date{" "}
@@ -313,6 +380,7 @@ export default function ServiceLogForm({
                                 setValueAs: optionalNumberValue,
                             })}
                         />
+                    </div>
                     </div>
                 </div>
 

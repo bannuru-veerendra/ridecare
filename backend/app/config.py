@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_STARTTLS: bool = True
+    # Shared secret for POST /internal/reminder-digests (Render Cron). Empty = disabled.
+    REMINDER_CRON_SECRET: str = ""
     DATABASE_URL: str
     REDIS_URL: str
     UPSTASH_REDIS_REST_URL: str

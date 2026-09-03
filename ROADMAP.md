@@ -72,7 +72,10 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 
 ## Next
 
-Nothing queued as a product slice. See Later for ideas that are out of scope.
+In progress on `feature/reminder-emails`:
+
+- **Email digests** for service soon/overdue and document expiry (SMTP; GitHub Actions daily cron → secured API endpoint)
+- **Suggest next-due** from the maintenance catalog intervals when logging a service (UI + API; rider can override)
 
 ---
 
@@ -80,9 +83,7 @@ Nothing queued as a product slice. See Later for ideas that are out of scope.
 
 These are out of scope for now — not missing pieces of the current product.
 
-- Google / social login
-- Email / push for service-due and document-expiry
-- Auto due dates from the maintenance catalog + odometer (guide is interval tips today)
+- Push notifications for reminders
 - Structured insurance fields (provider, number, coverage)
 - Multi-rider / shared garage permissions
 - AI assists: natural-language “when is my next service?”, fuel-price context

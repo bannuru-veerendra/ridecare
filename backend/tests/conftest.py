@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 
 os.environ["ENV_FILE"] = ".env.test"
@@ -34,6 +36,21 @@ class FakeRedis:
         return value if isinstance(value, bytes) else value.encode()
 
     async def setex(self, name: str, time: int, value: str | bytes) -> bool:
+        self._store[name] = self._as_bytes(value)
+        return True
+
+    async def set(
+        self,
+        name: str,
+        value: str | bytes,
+        nx: bool = False,
+        ex: int | None = None,
+        **kwargs,
+    ):
+        """Minimal Redis SET supporting NX (used by reminder digest dedupe)."""
+        _ = ex, kwargs
+        if nx and name in self._store:
+            return None
         self._store[name] = self._as_bytes(value)
         return True
 

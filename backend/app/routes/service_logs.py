@@ -11,8 +11,15 @@ from app.models.service_log import ServiceLog
 from app.models.user import User
 from app.models.vehicle import Vehicle
 from app.schemas.pagination import CursorPage
-from app.schemas.service_log import ServiceLogCreate, ServiceLogResponse, ServiceLogUpdate
+from app.schemas.service_log import (
+    ServiceLogCreate,
+    ServiceLogResponse,
+    ServiceLogUpdate,
+    SuggestNextDueRequest,
+    SuggestNextDueResponse,
+)
 from app.utils.auth_dependency import get_current_user
+from app.utils.auto_due import suggest_next_due
 from app.utils.cache import (
     cache_delete,
     cache_delete_pattern,
@@ -28,6 +35,25 @@ from app.utils.vehicle_access import verify_vehicle_ownership
 
 
 router = APIRouter(prefix="/service_logs", tags=["service_logs"])
+
+
+@router.post("/suggest-next-due", response_model=SuggestNextDueResponse)
+async def suggest_service_next_due(
+    payload: SuggestNextDueRequest,
+    current_user: User = Depends(get_current_user),
+) -> SuggestNextDueResponse:
+    """Suggest next-due date/km from maintenance catalog intervals for selected services."""
+    _ = current_user
+    suggestion = suggest_next_due(
+        services_done=payload.services_done,
+        visit_date=payload.date,
+        visit_odometer=payload.odometer,
+    )
+    return SuggestNextDueResponse(
+        next_service_date=suggestion.next_service_date,
+        next_service_odometer=suggestion.next_service_odometer,
+        matched_tasks=suggestion.matched_tasks,
+    )
 
 
 async def _invalidate_service_derived_caches(

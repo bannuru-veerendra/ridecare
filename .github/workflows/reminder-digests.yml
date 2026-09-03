@@ -1,0 +1,28 @@
+name: Reminder digests
+
+# Free daily cron — calls the Render API (no paid Render Cron Job needed).
+on:
+  schedule:
+    # 03:00 UTC ≈ 08:30 IST
+    - cron: "0 3 * * *"
+  workflow_dispatch: # allow manual "Run workflow" from the Actions tab
+
+jobs:
+  send:
+    name: Trigger reminder digests
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /internal/reminder-digests
+        env:
+          API_URL: ${{ secrets.REMINDER_API_URL }}
+          CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${API_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing REMINDER_API_URL or REMINDER_CRON_SECRET repo secret"
+            exit 1
+          fi
+          curl -fsS -X POST "${API_URL%/}/internal/reminder-digests" \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            -H "Content-Type: application/json" \
+            -w "\nHTTP %{http_code}\n"

@@ -78,5 +78,21 @@ export const serviceLogsApi = {
         });
         return data;
     },
+
+    suggestNextDue: async (payload: {
+        date: string;
+        odometer: number;
+        services_done: string[];
+    }): Promise<{
+        next_service_date: string | null;
+        next_service_odometer: number | null;
+        matched_tasks: string[];
+    }> => {
+        const { data } = await apiClient.post(
+            "/service_logs/suggest-next-due",
+            payload
+        );
+        return data;
+    },
 };
 

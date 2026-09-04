@@ -8,13 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.user import User
-from app.schemas.user import PasswordUpdate, UserProfileUpdate, UserResponse
+from app.schemas.user import (
+    DeleteAccountRequest,
+    PasswordUpdate,
+    UserProfileUpdate,
+    UserResponse,
+)
+from app.models.document import Document
+from app.models.vehicle import Vehicle
 from app.utils.access_token_service import revoke_all_user_access_tokens
 from app.utils.auth_cookies import clear_auth_cookies
 from app.utils.auth_dependency import get_current_user
 from app.utils.cache import (
     USER_IDENTITY_TTL,
     cache_delete,
+    cache_delete_pattern,
     cache_set,
     user_identity_key,
     user_identity_payload,
@@ -27,6 +35,7 @@ from app.utils.email_verification_service import (
 from app.utils.redis_client import get_redis
 from app.utils.refresh_token_service import revoke_all_user_tokens
 from app.utils.security import hash_password, verify_password
+from app.utils.storage import cleanup_document
 
 logger = logging.getLogger(__name__)
 
@@ -186,3 +195,55 @@ async def change_password(
         "User %s changed password — all sessions revoked",
         db_user.id,
     )
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    payload: DeleteAccountRequest,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> None:
+    """Permanently delete the account, vehicles, logs, and document files."""
+    db_user = await _user_for_write(db, current_user)
+    if not verify_password(payload.password, db_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Password is incorrect",
+        )
+
+    user_id = db_user.id
+    vehicles_result = await db.execute(
+        select(Vehicle.id).where(Vehicle.owner_id == user_id)
+    )
+    vehicle_ids = list(vehicles_result.scalars().all())
+
+    storage_paths: list[str] = []
+    if vehicle_ids:
+        paths_result = await db.execute(
+            select(Document.storage_path).where(
+                Document.vehicle_id.in_(vehicle_ids)
+            )
+        )
+        storage_paths = list(paths_result.scalars().all())
+
+    try:
+        await revoke_all_user_tokens(redis, str(user_id))
+        await revoke_all_user_access_tokens(redis, str(user_id))
+        await cache_delete(redis, user_identity_key(str(user_id)))
+        await cache_delete_pattern(redis, f"cache:vehicles:user:{user_id}*")
+    except RedisError:
+        logger.exception(
+            "Redis unavailable while deleting account for user %s", user_id
+        )
+        raise _REDIS_UNAVAILABLE
+
+    await db.delete(db_user)
+    await db.commit()
+    clear_auth_cookies(response)
+
+    for storage_path in storage_paths:
+        await cleanup_document(storage_path)
+
+    logger.info("User %s deleted account", user_id)

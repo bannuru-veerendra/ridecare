@@ -20,4 +20,6 @@ export interface User {
     email: string;
     full_name: string;
     email_verified: boolean;
+    email_service_reminders: boolean;
+    email_document_reminders: boolean;
 }

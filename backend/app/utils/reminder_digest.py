@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 
 from redis.asyncio import Redis
-from sqlalchemy import func, select, union_all
+from sqlalchemy import func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -112,7 +112,14 @@ async def send_reminder_digests(
 
     users_result = await db.execute(
         select(User)
-        .where(User.email_verified.is_(True), User.is_active.is_(True))
+        .where(
+            User.email_verified.is_(True),
+            User.is_active.is_(True),
+            or_(
+                User.email_service_reminders.is_(True),
+                User.email_document_reminders.is_(True),
+            ),
+        )
         .options(selectinload(User.vehicles))
     )
     users = list(users_result.scalars().unique().all())
@@ -126,6 +133,9 @@ async def send_reminder_digests(
             skipped += 1
             continue
 
+        include_service = bool(user.email_service_reminders)
+        include_documents = bool(user.email_document_reminders)
+
         live_map = await _live_odometers_map(db, vehicles)
         sections_text: list[str] = []
         sections_html: list[str] = []
@@ -134,31 +144,38 @@ async def send_reminder_digests(
             vehicle_id = vehicle.id
             live_odo = live_map[vehicle_id]
 
-            service_result = await db.execute(
-                select(ServiceLog)
-                .where(ServiceLog.vehicle_id == vehicle_id)
-                .order_by(ServiceLog.date.desc(), ServiceLog.odometer.desc())
-            )
-            service_logs = list(service_result.scalars().all())
-            next_service = find_active_next_service(service_logs)
-            service_reminder = build_service_reminder(
-                next_service,
-                today=today,
-                live_odometer=live_odo,
-            )
-
-            docs_result = await db.execute(
-                select(Document)
-                .where(
-                    Document.vehicle_id == vehicle_id,
-                    Document.expiry_date.is_not(None),
+            needs_service = False
+            service_reminder = None
+            if include_service:
+                service_result = await db.execute(
+                    select(ServiceLog)
+                    .where(ServiceLog.vehicle_id == vehicle_id)
+                    .order_by(ServiceLog.date.desc(), ServiceLog.odometer.desc())
                 )
-                .order_by(Document.expiry_date.asc())
-            )
-            documents = list(docs_result.scalars().all())
-            document_reminders = build_document_reminders(documents, today=today)
+                service_logs = list(service_result.scalars().all())
+                next_service = find_active_next_service(service_logs)
+                service_reminder = build_service_reminder(
+                    next_service,
+                    today=today,
+                    live_odometer=live_odo,
+                )
+                needs_service = service_reminder.status in ("soon", "overdue")
 
-            needs_service = service_reminder.status in ("soon", "overdue")
+            document_reminders = []
+            if include_documents:
+                docs_result = await db.execute(
+                    select(Document)
+                    .where(
+                        Document.vehicle_id == vehicle_id,
+                        Document.expiry_date.is_not(None),
+                    )
+                    .order_by(Document.expiry_date.asc())
+                )
+                documents = list(docs_result.scalars().all())
+                document_reminders = build_document_reminders(
+                    documents, today=today
+                )
+
             if not needs_service and not document_reminders:
                 continue
 
@@ -169,7 +186,7 @@ async def send_reminder_digests(
             lines: list[str] = [f"{label}:"]
             html_bits: list[str] = [f"<p><strong>{label}</strong></p><ul>"]
 
-            if needs_service:
+            if needs_service and service_reminder is not None:
                 parts: list[str] = [f"Service {service_reminder.status}"]
                 if service_reminder.days_until is not None:
                     parts.append(f"{service_reminder.days_until} days")

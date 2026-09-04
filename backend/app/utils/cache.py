@@ -40,6 +40,12 @@ def user_identity_payload(user: Any) -> dict[str, Any]:
         "full_name": user.full_name,
         "is_active": bool(user.is_active),
         "email_verified": bool(getattr(user, "email_verified", False)),
+        "email_service_reminders": bool(
+            getattr(user, "email_service_reminders", True)
+        ),
+        "email_document_reminders": bool(
+            getattr(user, "email_document_reminders", True)
+        ),
     }
 
 

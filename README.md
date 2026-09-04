@@ -36,20 +36,37 @@
 
 ## Why RideCare
 
-Most garage apps are thin CRUD. RideCare keeps **truth on the server**:
+Most garage apps are thin CRUD. RideCare keeps **domain rules on the server** — the UI renders API results, it does not re-derive mileage or reminder thresholds.
 
-| Capability | What the API owns |
-|------------|-------------------|
-| Mileage math | Liters + km/L from cost, price/L, and odometer deltas — recalculated on every fill-up edit/delete **and** baseline change |
-| Live odometer | `max(baseline, fuel, service)` so garage and dashboard never lie |
-| Dashboard aggregates | `GET /vehicles/{id}/summary` scans **all** logs — plus `service_reminder` and `document_reminders` for in-app alerts |
-| Charts | `GET /vehicles/{id}/analytics` — cost-per-km (fuel + service), trend series, monthly fuel spend |
-| Compare | `GET /vehicles/compare` — side-by-side spend, mileage, and ₹/km across the garage |
-| Scale | Stable cursor pagination (`date`/`created_at` + `id`) — same-day rows never skip |
-| Speed | Redis cache with write-through invalidation on fuel, service, vehicle, and document writes; auth identity cache so warm requests skip the user `SELECT` |
-| Auth | httpOnly cookie JWT + refresh rotation, **email verification** (SMTP magic link), access-token blocklist (`jti`) + revoke-epoch on password change, pipelined rate limits |
-| Docs | Typed vault uploads with signed URLs — never public blobs; vehicle delete cleans storage |
-| Guidelines | File-backed maintenance catalog (in-memory), filterable without a DB table |
+| Concern | What you can verify in the code / API |
+|---------|--------------------------------------|
+| Mileage | Liters + km/L from cost, price/L, and odometer deltas; full timeline recalc on create / update / delete / baseline change (`fuel_mileage.py`) |
+| Live odometer | `max(baseline, fuel max, service max)` in one map query path used by garage + summary |
+| Dashboard | `GET /vehicles/{id}/summary` aggregates logs server-side and returns `service_reminder` + `document_reminders` |
+| Charts | `GET /vehicles/{id}/analytics` — cost-per-km (fuel + service), last-10 mileage trend, last-6 months fuel spend |
+| Compare | `GET /vehicles/compare` — spend, mileage, ₹/km across owned vehicles only |
+| Lists | Cursor pagination on `(date\|created_at, id)` so same-day rows do not skip under **Load more** |
+| Hot path | Redis write-through cache for list/detail/summary/analytics/compare; auth pipeline batches rate limit + blocklist + revoke-epoch + identity (warm requests skip user `SELECT`) |
+| Auth | httpOnly JWT + refresh rotation; SMTP email verification; access `jti` blocklist; revoke-epoch on password change; IP- and user-based rate limits |
+| Files | Typed uploads to Supabase Storage with signed URLs; vehicle/account delete cleans storage objects |
+| Guide | 24-task JSON catalog, in-memory load, filter API — no guidelines table |
+
+---
+
+## Engineering evidence (not slogans)
+
+Concrete choices and checks — swap these in for “scalable / production-ready” claims on a resume or in interviews:
+
+| Evidence | Detail |
+|----------|--------|
+| Automated tests | **~200** pytest cases on GitHub Actions (auth, ownership 404s, mileage recalc, pagination, cache invalidation, reminders, rate limits, exports) |
+| Query shape | Composite indexes on list/pagination columns (`vehicle_id`/`owner_id` + sort keys), not single-column-only indexes |
+| Failure / security paths | Wrong owner → **404** (not 403); logout/refresh blocklists access `jti`; password change revokes refresh + access epoch and clears cookies |
+| Cache correctness | Writes invalidate the related Redis keys (fuel/service/vehicle/document); identity cache refreshed or cleared on profile/password change |
+| Deployed slice | Live app (Vercel) + API (Render) with same-origin `/api` proxy so auth cookies stay first-party |
+| Auth hardening | Unverified email cannot log in; email change re-triggers verification and clears sessions |
+
+What this repo does **not** claim yet: published load-test numbers, APM dashboards, or multi-region HA. Those belong in Later if measured.
 
 The frontend stays thin: sheets, charts, and **Load more** lists over a clear REST API.
 
@@ -286,5 +303,5 @@ What’s next → [ROADMAP.md](ROADMAP.md)
 ---
 
 <p align="center">
-  <sub>Built for riders who want numbers they can trust — and an API recruiters can read.</sub>
+  <sub>Server-owned mileage and reminders — backed by tests, indexes, and a live deploy.</sub>
 </p>

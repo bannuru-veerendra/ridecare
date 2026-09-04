@@ -18,6 +18,8 @@ class User(Base, TimestampMixin):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
+    email_service_reminders = Column(Boolean, default=True, nullable=False)
+    email_document_reminders = Column(Boolean, default=True, nullable=False)
 
     vehicles = relationship("Vehicle", back_populates="owner", cascade="all, delete-orphan")
 

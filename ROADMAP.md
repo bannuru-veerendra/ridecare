@@ -12,6 +12,7 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 - Changing email resets verification, sends a new link, and clears sessions
 - Refresh-token rotation in Redis; logout revokes sessions
 - Password strength policy; profile + password change with session revoke **and cookie clear**
+- **Delete account** — password-confirmed; cascades garage data and cleans storage
 - Access-token blocklisting in Redis (`jti`) on logout / refresh; per-user revoke epoch on password change
 - IP- and user-based rate limiting (user limiter pipelined with auth Redis reads)
 
@@ -34,6 +35,7 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 ### Service history
 - Service visits with tags, cost, and next-due fields
 - `GET /service_logs/next` for reminders
+- **Suggest next-due** from the maintenance catalog (`POST /service_logs/suggest-next-due` + “Fill from guide” in the form)
 - Cursor-paginated list + service tab **Load more**
 - Partial PATCH validates next-service odometer against existing reading
 - Reminder clears once a visit meets the due date or odometer
@@ -46,6 +48,11 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 - Vehicle delete removes linked storage objects
 - Document writes invalidate vehicle summary cache (reminder freshness)
 - Cursor-paginated list + docs tab **Load more**; API returns `days_until` / `expiry_status`
+
+### Reminders & email digests
+- **In-app reminders** on the dashboard — service soon/overdue + document expiry
+- **Daily email digests** via GitHub Actions → `POST /internal/reminder-digests` (midnight IST)
+- Per-user toggles: service due emails / document expiry emails (Settings)
 
 ### Maintenance guide
 - Static JSON catalog (24 tasks) with in-memory cache
@@ -64,18 +71,15 @@ What has shipped on `main`, and what comes next. Product overview: [README.md](R
 ### Frontend product surface
 - Dark rider UI: auth (login · register · **check-email** · **verify-email**), garage, compare, vehicle detail (Fuel · Service · Docs · Analytics)
 - Dashboard driven by the summary API
-- **In-app reminders** on the dashboard — service soon/overdue + document expiry
-- Settings (profile / password), error boundary, 404 page
+- Settings: profile, password, email reminder toggles, delete account
+- Error boundary, 404 page
 - Recharts analytics: cost-per-km, summary cards, mileage trend, monthly fuel spend
 
 ---
 
 ## Next
 
-In progress on `feature/reminder-emails`:
-
-- **Email digests** for service soon/overdue and document expiry (SMTP; GitHub Actions daily cron → secured API endpoint)
-- **Suggest next-due** from the maintenance catalog intervals when logging a service (UI + API; rider can override)
+Nothing queued as a product slice. See Later for ideas that are out of scope.
 
 ---
 

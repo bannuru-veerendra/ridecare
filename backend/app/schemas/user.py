@@ -18,6 +18,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     email_verified: bool = False
+    email_service_reminders: bool = True
+    email_document_reminders: bool = True
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -26,6 +28,8 @@ class UserProfileUpdate(BaseModel):
     """Request body for PATCH /users/me"""
     full_name: str | None = Field(None, min_length=2, max_length=100)
     email: EmailStr | None = None
+    email_service_reminders: bool | None = None
+    email_document_reminders: bool | None = None
 
     @field_validator("full_name")
     @classmethod
@@ -46,9 +50,19 @@ class UserProfileUpdate(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one_field(self):
-        if self.full_name is None and self.email is None:
-            raise ValueError("At least one of full_name or email must be provided")
+        if (
+            self.full_name is None
+            and self.email is None
+            and self.email_service_reminders is None
+            and self.email_document_reminders is None
+        ):
+            raise ValueError("At least one field must be provided")
         return self
+
+
+class DeleteAccountRequest(BaseModel):
+    """Confirm account deletion with the current password."""
+    password: str = Field(min_length=1)
 
 
 class PasswordUpdate(BaseModel):

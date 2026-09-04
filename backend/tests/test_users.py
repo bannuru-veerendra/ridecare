@@ -268,3 +268,65 @@ async def test_change_password_revokes_sessions(
     # Old access JWT is also dead via revoke-epoch
     me_response = await client.get("/users/me", headers=headers)
     assert me_response.status_code == 401
+
+
+async def test_update_reminder_preferences(client: AsyncClient, auth_headers: dict):
+    """Toggle service and document reminder email prefs."""
+    response = await client.patch(
+        "/users/me",
+        json={
+            "email_service_reminders": False,
+            "email_document_reminders": False,
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email_service_reminders"] is False
+    assert data["email_document_reminders"] is False
+
+    again = await client.get("/users/me", headers=auth_headers)
+    assert again.status_code == 200
+    assert again.json()["email_service_reminders"] is False
+    assert again.json()["email_document_reminders"] is False
+
+
+async def test_delete_account_requires_password(
+    client: AsyncClient, auth_headers: dict
+):
+    response = await client.request(
+        "DELETE",
+        "/users/me",
+        json={"password": "WrongPassword1!"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 401
+
+
+async def test_delete_account_success(
+    client: AsyncClient,
+    auth_headers: dict,
+    registered_user: dict,
+    created_vehicle: dict,
+):
+    """Deleting the account removes the user and clears auth."""
+    _ = created_vehicle
+    response = await client.request(
+        "DELETE",
+        "/users/me",
+        json={"password": registered_user["password"]},
+        headers=auth_headers,
+    )
+    assert response.status_code == 204
+
+    me = await client.get("/users/me", headers=auth_headers)
+    assert me.status_code == 401
+
+    login = await client.post(
+        "/auth/login",
+        json={
+            "email": registered_user["email"],
+            "password": registered_user["password"],
+        },
+    )
+    assert login.status_code in (401, 403)

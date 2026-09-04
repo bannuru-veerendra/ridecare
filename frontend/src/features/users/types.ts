@@ -5,4 +5,6 @@
 export type {
     UpdateProfilePayload,
     UpdatePasswordPayload,
+    UpdateReminderPrefsPayload,
+    DeleteAccountPayload,
 } from "@/api/users.api";

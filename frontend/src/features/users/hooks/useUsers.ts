@@ -9,6 +9,8 @@ import type { User } from "@/types";
 import type {
     UpdatePasswordPayload,
     UpdateProfilePayload,
+    UpdateReminderPrefsPayload,
+    DeleteAccountPayload,
 } from "../types";
 
 export const usersKeys = {
@@ -48,6 +50,26 @@ export const useUpdateProfile = () => {
     });
 };
 
+/** Update reminder email preferences */
+export const useUpdateReminderPrefs = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (payload: UpdateReminderPrefsPayload) =>
+            usersApi.updateMe(payload),
+        onSuccess: (data) => {
+            rememberProfile(data);
+            queryClient.setQueryData(usersKeys.me, data);
+            toast.success("Email preferences saved");
+        },
+        onError: (error) => {
+            toast.error(
+                getApiErrorMessage(error, "Failed to update email preferences")
+            );
+        },
+    });
+};
+
 /**
  * Change password and revoke all sessions.
  * User must log in again afterward.
@@ -69,6 +91,32 @@ export const useUpdatePassword = () => {
             toast.error(
                 getApiErrorMessage(error, "Failed to change password"),
                 { id: "password-update-error" }
+            );
+        },
+    });
+};
+
+/**
+ * Permanently delete the account and clear the local session.
+ */
+export const useDeleteAccount = () => {
+    const navigate = useNavigate();
+    const clearSession = useAuthStore((state) => state.clearSession);
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (payload: DeleteAccountPayload) =>
+            usersApi.deleteAccount(payload),
+        onSuccess: () => {
+            queryClient.clear();
+            clearSession();
+            toast.success("Account deleted");
+            navigate("/register");
+        },
+        onError: (error) => {
+            toast.error(
+                getApiErrorMessage(error, "Failed to delete account"),
+                { id: "delete-account-error" }
             );
         },
     });

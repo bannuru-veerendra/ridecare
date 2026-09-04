@@ -3,8 +3,8 @@ name: Reminder digests
 # Free daily cron — calls the Render API (no paid Render Cron Job needed).
 on:
   schedule:
-    # 03:00 UTC ≈ 08:30 IST
-    - cron: "0 3 * * *"
+    # 18:30 UTC = 00:00 IST (midnight India)
+    - cron: "30 18 * * *"
   workflow_dispatch: # allow manual "Run workflow" from the Actions tab
 
 jobs:

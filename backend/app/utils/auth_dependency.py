@@ -58,6 +58,12 @@ def _user_from_identity_cache(data: dict) -> User | None:
             hashed_password="",
             is_active=True,
             email_verified=bool(data.get("email_verified", False)),
+            email_service_reminders=bool(
+                data.get("email_service_reminders", True)
+            ),
+            email_document_reminders=bool(
+                data.get("email_document_reminders", True)
+            ),
         )
     except (KeyError, TypeError, ValueError):
         return None
